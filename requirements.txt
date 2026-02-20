@@ -1,0 +1,12 @@
+# requirements.txt
+
+streamlit
+langgraph
+langchain
+langchain-google-genai
+langchain-community
+google-genai
+python-dotenv
+pandas
+pydantic
+tavily-python
