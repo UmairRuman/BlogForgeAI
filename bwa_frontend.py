@@ -13,6 +13,7 @@ import pandas as pd
 import streamlit as st
 
 from bwa_backend import app
+from bwa_export import to_styled_html, to_pdf_bytes
 
 # ─────────────────────────────────────────────
 # Page config — must be FIRST streamlit call
@@ -841,8 +842,9 @@ if out:
             render_markdown_with_local_images(final_md)
             st.markdown('</div>', unsafe_allow_html=True)
 
-            # Downloads
+            # ── Export bar ──────────────────────────────────────
             st.markdown('<div style="height:1rem"></div>', unsafe_allow_html=True)
+
             plan_obj = out.get("plan")
             if hasattr(plan_obj, "blog_title"):
                 blog_title = plan_obj.blog_title
@@ -851,19 +853,86 @@ if out:
             else:
                 blog_title = extract_title_from_md(final_md, "blog")
 
-            md_filename = f"{safe_slug(blog_title)}.md"
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                st.download_button("⬇️  Download Markdown", data=final_md.encode("utf-8"),
-                                   file_name=md_filename, mime="text/markdown", use_container_width=True)
-            with c2:
-                bundle = bundle_zip(final_md, md_filename, Path("images"))
-                st.download_button("📦  Download Bundle (MD + images)", data=bundle,
-                                   file_name=f"{safe_slug(blog_title)}_bundle.zip",
-                                   mime="application/zip", use_container_width=True)
-            with c3:
-                st.download_button("📋  Copy as Text", data=final_md.encode("utf-8"),
-                                   file_name=md_filename, mime="text/plain", use_container_width=True)
+            slug = safe_slug(blog_title)
+
+            st.markdown("""
+            <div style="color:#8a90a8;font-size:11px;letter-spacing:.5px;
+                        text-transform:uppercase;font-family:'DM Mono',monospace;
+                        margin-bottom:.6rem;">Export</div>
+            """, unsafe_allow_html=True)
+
+            ec1, ec2, ec3, ec4 = st.columns(4)
+
+            with ec1:
+                st.download_button(
+                    "⬇️  Markdown",
+                    data=final_md.encode("utf-8"),
+                    file_name=f"{slug}.md",
+                    mime="text/markdown",
+                    use_container_width=True,
+                    help="Raw .md file — paste into any blog platform or editor",
+                )
+
+            with ec2:
+                # ── Styled HTML export ──────────────────────
+                try:
+                    html_bytes = to_styled_html(final_md, blog_title).encode("utf-8")
+                    st.download_button(
+                        "🌐  HTML",
+                        data=html_bytes,
+                        file_name=f"{slug}.html",
+                        mime="text/html",
+                        use_container_width=True,
+                        help="Fully styled HTML — open in browser or print to PDF via Ctrl+P",
+                    )
+                except Exception as e:
+                    st.button("🌐  HTML", disabled=True, use_container_width=True,
+                              help=f"HTML export failed: {e}")
+
+            with ec3:
+                # ── PDF export via ReportLab ─────────────────
+                try:
+                    pdf_bytes = to_pdf_bytes(final_md, blog_title)
+                    st.download_button(
+                        "📄  PDF",
+                        data=pdf_bytes,
+                        file_name=f"{slug}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                        help="Formatted PDF — ready to share or print",
+                    )
+                except Exception as e:
+                    st.button("📄  PDF", disabled=True, use_container_width=True,
+                              help=f"PDF export failed: {e}")
+
+            with ec4:
+                bundle = bundle_zip(final_md, f"{slug}.md", Path("images"))
+                st.download_button(
+                    "📦  Bundle",
+                    data=bundle,
+                    file_name=f"{slug}_bundle.zip",
+                    mime="application/zip",
+                    use_container_width=True,
+                    help="ZIP with Markdown + all generated images",
+                )
+
+            # ── Pro tip ──────────────────────────────────────
+            st.markdown("""
+            <div style="
+                background:#13161e; border:1px solid #252836; border-radius:8px;
+                padding:.6rem 1rem; margin-top:.6rem;
+                display:flex; align-items:center; gap:.6rem;
+            ">
+                <span style="color:#f5a623; font-size:13px;">💡</span>
+                <span style="color:#8a90a8; font-size:12px;">
+                    <b style="color:#eef0f6;">HTML tip:</b>
+                    Open the HTML file in your browser and press
+                    <code style="color:#2dd4c4; background:#0d0f14;
+                                 padding:1px 5px; border-radius:4px;">Ctrl + P</code>
+                    → <i>Save as PDF</i> for a pixel-perfect, print-ready version.
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
 
     # ── Images tab ──
     with tab_images:
