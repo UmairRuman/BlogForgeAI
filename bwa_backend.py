@@ -547,7 +547,7 @@ def generate_and_place_images(state: State) -> dict:
                 md = md.replace(placeholder, prompt_block)
                 continue
 
-        img_md = f"![{spec['alt']}](images/{filename})\n*{spec['caption']}*"
+        img_md = f"![{spec['alt']}]({images_dir}/{filename})\n*{spec['caption']}*"
         md = md.replace(placeholder, img_md)
 
     filename = f"{_safe_slug(plan.blog_title)}.md"

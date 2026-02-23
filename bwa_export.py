@@ -10,6 +10,7 @@ Functions:
 
 from __future__ import annotations
 
+import os
 import re
 from io import BytesIO
 from typing import List, Tuple
@@ -365,12 +366,20 @@ def _embed_image(src: str, alt: str, caption: str, st: dict) -> list:
     from pathlib import Path
 
     # strip leading ./ so Path resolves relative to cwd
-    clean = src.strip().lstrip("./")
-    img_path = Path(clean)
+    src = src.strip()
+    clean = src.lstrip("./")
 
+# Try absolute path first (cloud deployments write full paths)
+    img_path = Path(src)
     if not img_path.exists():
-        # try resolving from absolute cwd
-        img_path = Path.cwd() / clean
+      img_path = Path(clean) 
+    if not img_path.exists():
+      img_path = Path.cwd() / clean
+# Try BWA_IMAGES_DIR
+    if not img_path.exists():
+      images_env = os.getenv("BWA_IMAGES_DIR")
+      if images_env:
+        img_path = Path(images_env) / Path(src).name
 
     if not img_path.exists():
         # graceful fallback: show a note instead of crashing

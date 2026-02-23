@@ -402,7 +402,29 @@ _CAPTION_LINE_RE = re.compile(r"^\*(?P<cap>.+)\*$")
 
 
 def _resolve_image_path(src: str) -> Path:
-    return Path(src.strip().lstrip("./")).resolve()
+    import os
+    src = src.strip()
+    
+    # 1. Try the path exactly as written (handles /tmp/... absolute paths)
+    p = Path(src)
+    if p.exists():
+        return p
+    
+    # 2. Try stripping ./ and resolving relative to cwd
+    p = Path(src.lstrip("./")).resolve()
+    if p.exists():
+        return p
+    
+    # 3. Try BWA_IMAGES_DIR env var (Streamlit Cloud)
+    images_env = os.getenv("BWA_IMAGES_DIR")
+    if images_env:
+        filename = Path(src).name   # just the filename
+        p = Path(images_env) / filename
+        if p.exists():
+            return p
+    
+    # 4. Return the best guess so the warning message is helpful
+    return Path(src.lstrip("./")).resolve()
 
 
 def render_markdown_with_local_images(md: str):
