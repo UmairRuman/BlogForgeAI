@@ -266,6 +266,7 @@ from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, HRFlowable,
     Preformatted, Table, TableStyle, KeepTogether,
+    Image as RLImage,
 )
 from reportlab.lib.styles import getSampleStyleSheet
 
@@ -290,7 +291,7 @@ def _make_styles() -> dict:
                               textColor=_C_DARK, spaceAfter=6, spaceBefore=4, leading=28),
         "h2": ParagraphStyle("H2", fontName="Helvetica-Bold", fontSize=14,
                               textColor=_C_NAVY, spaceAfter=4, spaceBefore=14, leading=18,
-                              ),
+                            ),
         "h3": ParagraphStyle("H3", fontName="Helvetica-Bold", fontSize=11.5,
                               textColor=_C_BODY, spaceAfter=3, spaceBefore=8, leading=15),
         "body": ParagraphStyle("Body", fontName="Helvetica", fontSize=10,
@@ -349,6 +350,80 @@ def _blockquote_block(text: str, st: dict) -> Table:
         ("LINEBEFORE",    (0, 0), (0, -1),  3, _C_BLUE),
     ]))
     return tbl
+
+
+# ── Image embedding helper ───────────────────────────────────
+_IMG_MD_RE  = re.compile(r"^!\[(?P<alt>[^\]]*)\]\((?P<src>[^)]+)\)$")
+_MAX_IMG_W  = _W - 1.7 * inch   # honour page margins
+
+def _embed_image(src: str, alt: str, caption: str, st: dict) -> list:
+    """
+    Resolve `src` relative to cwd, scale to fit page width,
+    and return a list of Flowables: [Spacer, image-table, optional-caption, Spacer].
+    Returns an empty list if the file cannot be found/loaded.
+    """
+    from pathlib import Path
+
+    # strip leading ./ so Path resolves relative to cwd
+    clean = src.strip().lstrip("./")
+    img_path = Path(clean)
+
+    if not img_path.exists():
+        # try resolving from absolute cwd
+        img_path = Path.cwd() / clean
+
+    if not img_path.exists():
+        # graceful fallback: show a note instead of crashing
+        note = Paragraph(
+            f'<i>[Image not found: {src}]</i>',
+            ParagraphStyle("ImgMiss", fontName="Helvetica-Oblique", fontSize=9,
+                           textColor=_C_MUTED, spaceAfter=4),
+        )
+        return [note]
+
+    try:
+        # load and measure natural size
+        img = RLImage(str(img_path))
+        nat_w, nat_h = img.imageWidth, img.imageHeight
+
+        # scale down to fit max width, preserve aspect ratio
+        if nat_w > _MAX_IMG_W:
+            scale   = _MAX_IMG_W / nat_w
+            disp_w  = _MAX_IMG_W
+            disp_h  = nat_h * scale
+        else:
+            disp_w, disp_h = float(nat_w), float(nat_h)
+
+        img.drawWidth  = disp_w
+        img.drawHeight = disp_h
+
+        # centre the image in a single-cell table
+        tbl = Table([[img]], colWidths=[_W - 1.1 * inch])
+        tbl.setStyle(TableStyle([
+            ("ALIGN",         (0, 0), (-1, -1), "CENTER"),
+            ("TOPPADDING",    (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+
+        flowables: list = [Spacer(1, 8), tbl]
+
+        # caption (italic, centred, muted)
+        cap_text = caption or alt
+        if cap_text:
+            flowables.append(
+                Paragraph(
+                    f"<i>{cap_text}</i>",
+                    ParagraphStyle("ImgCap", fontName="Helvetica-Oblique", fontSize=9,
+                                   textColor=_C_MUTED, alignment=TA_CENTER,
+                                   spaceAfter=2, spaceBefore=2),
+                )
+            )
+
+        flowables.append(Spacer(1, 8))
+        return flowables
+
+    except Exception:
+        return []   # silently skip unreadable images
 
 
 # ── Markdown line-level inline cleaner ──────────────────────
@@ -474,9 +549,24 @@ def _parse_md_to_flowables(md_text: str, st: dict) -> list:
             i += 1
             continue
 
-        # ── image line → skip (already rendered inline in Streamlit)
+        # ── image line → embed in PDF with optional caption
         if stripped.startswith("!["):
             flush_para()
+            m = _IMG_MD_RE.match(stripped)
+            if m:
+                alt_text = m.group("alt").strip()
+                src_text = m.group("src").strip()
+
+                # peek at the NEXT line — if it's *italic caption*, consume it
+                caption_text = ""
+                if i + 1 < len(lines):
+                    next_stripped = lines[i + 1].strip()
+                    cap_m = re.match(r"^\*(?P<cap>.+)\*$", next_stripped)
+                    if cap_m:
+                        caption_text = cap_m.group("cap").strip()
+                        i += 1  # consume caption line
+
+                flowables.extend(_embed_image(src_text, alt_text, caption_text, st))
             i += 1
             continue
 
