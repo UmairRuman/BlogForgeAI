@@ -1,5 +1,4 @@
 # requirements.txt
-
 streamlit
 langgraph
 langchain
@@ -10,3 +9,6 @@ python-dotenv
 pandas
 pydantic
 tavily-python
+markdown
+reportlab
+Pillow

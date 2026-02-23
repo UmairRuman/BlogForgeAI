@@ -16,7 +16,7 @@ from langgraph.types import Send
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from dotenv import load_dotenv
-
+import tempfile
 load_dotenv()
 
 
@@ -525,7 +525,7 @@ def generate_and_place_images(state: State) -> dict:
         Path(filename).write_text(md, encoding="utf-8")
         return {"final": md}
 
-    images_dir = Path("images")
+    images_dir = Path(os.getenv("BWA_IMAGES_DIR", "images"))
     images_dir.mkdir(exist_ok=True)
 
     for spec in image_specs:
